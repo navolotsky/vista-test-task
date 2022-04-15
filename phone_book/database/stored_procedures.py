@@ -1,103 +1,11 @@
 import enum
-import logging
-from typing import Optional, Union
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtSql import QSqlDatabase, QSqlError, QSqlQuery, QSqlQueryModel
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtSql import QSqlQuery
+from PyQt5.QtSql import QSqlQueryModel
 
-logger = logging.getLogger(__name__)
-
-
-class DatabaseError(Exception):
-    @staticmethod
-    def from_error(error: QSqlError):
-        err_type_to_exc_cls = {
-            QSqlError.NoError: None,
-            QSqlError.ConnectionError: DatabaseConnectionError,
-            QSqlError.StatementError: DatabaseStatementError,
-            QSqlError.TransactionError: DatabaseTransactionError,
-            QSqlError.UnknownError: DatabaseUnknownError
-        }
-        try:
-            exc_cls = err_type_to_exc_cls[error.type()]
-        except KeyError:
-            raise RuntimeError("unknown value {} of {}".format(error.type(), QSqlError.ErrorType))
-        return None if exc_cls is None else exc_cls(
-            "[{}] {}; {}".format(error.nativeErrorCode(), error.databaseText(), error.driverText()), error)
-
-    def __str__(self):
-        return str(self.args[0]) if self.args else super().__str__()
-
-
-class DatabaseConnectionError(DatabaseError):
-    pass
-
-
-class DatabaseStatementError(DatabaseError):
-    pass
-
-
-class DatabaseTransactionError(DatabaseError):
-    pass
-
-
-class DatabaseUnknownError(DatabaseError):
-    pass
-
-
-def process_error(value: Union[QSqlError, QSqlQuery, QSqlDatabase],
-                  raise_exc=True, log=True, show_msg_if_not_conn_err=False) -> Optional[DatabaseError]:
-    error = value.lastError() if isinstance(value, (QSqlQuery, QSqlDatabase)) else value
-    if error.type() == QSqlError.NoError:
-        raise ValueError("there was no error")
-    exc = DatabaseError.from_error(error)
-    if show_msg_if_not_conn_err and not isinstance(exc, DatabaseConnectionError):
-        msg_box = QMessageBox(QMessageBox.Critical, "Телефонная книжка",
-                              "Неожиданная ошибка при работе с базой данных.")
-        msg_box.setDetailedText(str(exc))
-        msg_box.exec()
-    if log:
-        if isinstance(exc, DatabaseConnectionError):
-            logger.warning("Can't connect to database: %s", str(exc))
-        else:
-            logger.error("Got an unexpected database-related error: %s", str(exc))
-    if raise_exc:
-        raise exc
-    return exc
-
-
-def setup_db(settings, default_settings):
-    try:
-        settings.beginGroup("database")
-        if settings is not default_settings:
-            default_settings.beginGroup("database")
-        qsql_driver = settings.value("qsql_driver")
-        if qsql_driver is None:
-            qsql_driver = default_settings.value("qsql_driver")
-        db = QSqlDatabase.addDatabase(qsql_driver, connectionName="main_database")
-        if not db.isValid():
-            raise RuntimeError("database driver improperly configured")
-        for key, method in zip(("host_name", "port", "database_name", "username", "password"),
-                               (db.setHostName, db.setPort, db.setDatabaseName, db.setUserName, db.setPassword)):
-            val = settings.value(key)
-            if val is None:
-                val = default_settings.value(key)
-            if key == "port":
-                val = int(val)
-            method(val)
-    finally:
-        settings.endGroup()
-        default_settings.endGroup()
-
-
-def get_opened_db():
-    if not QSqlDatabase.contains(connectionName="main_database"):
-        raise RuntimeError("You must call `setup_db()` at first")
-    db = QSqlDatabase.database(connectionName="main_database", open=True)
-    if db.isOpenError():
-        process_error(db)
-    return db
+from .config import get_opened_db
+from .errors import process_error
 
 
 def check_session_exists(session_key):
