@@ -1,7 +1,7 @@
 # Тестовое задание от Виста: телефонная книжка на PyQt + MariaDB
 Приложение находится в процессе разработки.
 
-В dev-окружении запускалось на Windows 10 + PyQt 5.12.1 + Python 3.7.9 x64 + MariaDB 10.6.4
+В dev-окружении запускалось на Windows 10 + PyQt 5.12.1 + Python 3.7.9 x64 + MariaDB 10.6.4.</br>
 В переменной окружения `PATH` [должен](https://doc.qt.io/qt-5/sql-driver.html#how-to-build-the-qmysql-plugin-on-windows) находиться путь к `libmysql.dll` или `libmariadb.dll`.
 
 Запуск (при нахождении в директории проекта)

@@ -38,6 +38,7 @@ CREATE TABLE contacts
 -- *** Stored procedures ***
 
 DELIMITER //
+
 CREATE PROCEDURE check_session(session_key CHAR(32), OUT session_exists BOOL)
     NOT DETERMINISTIC
     READS SQL DATA
@@ -61,17 +62,15 @@ CREATE PROCEDURE register(username VARCHAR(255), email VARCHAR(255), birth_date 
                   WHERE u.email = email) THEN
         SET result = 'email_already_exists';
     ELSE
-        BEGIN
-            SELECT SUBSTR(md5(rand()), 1, 8) INTO password;
-            -- TODO: send a password by an email
-            INSERT INTO users(username, email, password, birth_date)
-            VALUES (username, email, md5(password), birth_date);
-            IF EXISTS(SELECT 42 FROM users as u WHERE u.username = username) THEN
-                SET result = 'registered_successfully';
-            ELSE
-                SET result = 'unknown_error';
-            END IF;
-        END;
+        SELECT SUBSTR(md5(rand()), 1, 8) INTO password;
+        -- TODO: send a password by an email
+        INSERT INTO users(username, email, password, birth_date)
+        VALUES (username, email, md5(password), birth_date);
+        IF EXISTS(SELECT 42 FROM users as u WHERE u.username = username) THEN
+            SET result = 'registered_successfully';
+        ELSE
+            SET result = 'unknown_error';
+        END IF;
     END IF;
 //
 

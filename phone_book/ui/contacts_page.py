@@ -16,7 +16,13 @@ class Ui_ContactsPage(object):
         self.gridLayout = QtWidgets.QGridLayout(ContactsPage)
         self.gridLayout.setObjectName("gridLayout")
         self.tableView = QtWidgets.QTableView(ContactsPage)
+        self.tableView.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked|QtWidgets.QAbstractItemView.EditKeyPressed)
+        self.tableView.setTabKeyNavigation(False)
+        self.tableView.setAlternatingRowColors(True)
+        self.tableView.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.tableView.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.tableView.setObjectName("tableView")
+        self.tableView.horizontalHeader().setHighlightSections(False)
         self.tableView.verticalHeader().setVisible(False)
         self.gridLayout.addWidget(self.tableView, 0, 0, 1, 1)
 

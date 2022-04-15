@@ -1,9 +1,9 @@
 from PyQt5 import QtCore
+from PyQt5.QtWidgets import QHeaderView
 
-from . import contact_data_form, register_form
+from . import contact_data_form, contacts_page, register_form
 from .auth_form import Ui_AuthForm
 from .contact_data_form import Ui_ContactDataForm
-from .contacts_page import Ui_ContactsPage
 from .main_window import Ui_MainWindow
 
 
@@ -18,3 +18,9 @@ class Ui_ContactDataForm(contact_data_form.Ui_ContactDataForm):
     def setupUi(self, ContactDataForm):
         super().setupUi(ContactDataForm)
         self.name_ln_edt.setFocus()
+
+
+class Ui_ContactsPage(contacts_page.Ui_ContactsPage):
+    def setupUi(self, ContactsPage):
+        super().setupUi(ContactsPage)
+        self.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)

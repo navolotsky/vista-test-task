@@ -12,12 +12,12 @@ logger = logging.getLogger("phone_book.__main__")
 
 
 def show_db_conn_err_msg(parent):
-    QMessageBox.critical(parent, "Ошибка",
+    QMessageBox.critical(parent, "Телефонная книжка",
                          "Не удалось соединиться с базой данных. Попробуйте позже или проверьте настройки.")
 
 
 def show_not_implemented_msg(parent):
-    QMessageBox.information(parent, "Увы!", "Очень жаль, но пока не реализовано.")
+    QMessageBox.information(parent, "Телефонная книжка", "Очень жаль, но пока не реализовано.")
 
 
 class RegisterForm(QDialog):
@@ -47,18 +47,20 @@ class RegisterForm(QDialog):
                 self.accept()
                 # TODO: send a password by an email
                 ans = QMessageBox.question(
-                    self.parent(), "Регистрация успешна",
-                    "Ваш пароль выслан [! не реализовано] на указанную почту. Скопировать в буфер обмена?")
+                    self.parent(), "Телефонная книжка",
+                    "Регистрация успешна.\n"
+                    "Ваш пароль выслан [! не реализовано] на указанную почту.\n"
+                    "Скопировать в буфер обмена?")
                 if ans == QMessageBox.Yes:
                     QApplication.clipboard().setText(password)
             elif res_code is db.RegisterResult.USERNAME_EXISTS:
                 self.ui.username_ln_edt.setFocus()
-                QMessageBox.warning(self.parent(), "Проблема", "Пользователь с таким именем уже существует.")
+                QMessageBox.warning(self.parent(), "Телефонная книжка", "Пользователь с таким именем уже существует.")
             elif res_code is db.RegisterResult.EMAIL_EXISTS:
                 self.ui.email_ln_edt.setFocus()
-                QMessageBox.warning(self.parent(), "Проблема", "Пользователь с таким e-mail уже существует.")
+                QMessageBox.warning(self.parent(), "Телефонная книжка", "Пользователь с таким e-mail уже существует.")
             elif res_code is db.RegisterResult.UNKNOWN_ERROR:
-                QMessageBox.critical(self.parent(), "Проблема", "Возникла непредвиденная ошибка.")
+                QMessageBox.critical(self.parent(), "Телефонная книжка", "Возникла непредвиденная ошибка.")
                 self.close()
             else:
                 raise RuntimeError("unknown member: {}".format(res_code))
@@ -102,7 +104,8 @@ class AuthForm(QDialog):
                 self.accept()
             else:
                 self.ui.password_ln_edt.setFocus()
-                QMessageBox.warning(self, "Не удалось войти", "Такая комбинация учетных данных не найдена.")
+                QMessageBox.warning(self, "Телефонная книжка",
+                                    "Не удалось войти. Такая комбинация учетных данных не найдена.")
         finally:
             self.ui.login_btn.setEnabled(True)
 
@@ -124,8 +127,9 @@ class AuthForm(QDialog):
                     self.accept()
                 else:
                     self.close()
-                    QMessageBox.warning(self.parent(), "Не удалось войти", "Автоматический вход не удался.")
+                    QMessageBox.warning(self.parent(), "Телефонная книжка", "Автоматический вход не удался.")
         else:
+            # TODO: process a case when register form closed due to db connection error
             self.show()
 
     def handle_show_password_chb_clicked(self, chb_active):
@@ -139,10 +143,11 @@ class AuthForm(QDialog):
         self.remember_me = chb_active
 
 
-class ContactsPage(QWidget, Ui_ContactsPage):
+class ContactsPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setupUi(self)
+        self.ui = Ui_ContactsPage()
+        self.ui.setupUi(self)
 
 
 class ContactDataForm(QDialog):
@@ -194,9 +199,7 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
-        self.settings = None
-        self.default_settings = None
-        self.setup_settings_and_db()
+        self.settings, self.default_settings = self.get_settings()
 
         self.session_key = self.read_session_key_from_storage()
         self.username = None
@@ -208,7 +211,7 @@ class MainWindow(QMainWindow):
         self.letter_sets = ("АБ", "ВГ", "ДЕЁ", "ЖЗИЙ", "КЛ", "МН", "ОП", "РС", "ТУ", "ФХ", "ЦЧШЩ", "ЪЫЬЭ", "ЮЯ")
         self.rest_contacts_page_name = "Другое"
         self.full_set = ''.join(self.letter_sets)
-        self.contact_model_view_pairs = {}
+        self.contacts_model_view_tab_tab_visited = {}
         self.setup_tabs()
 
         self.ui.log_in_out_btn.clicked.connect(self.handle_log_in_out_btn_clicked)
@@ -217,22 +220,23 @@ class MainWindow(QMainWindow):
         self.ui.contacts_tab_widget.currentChanged.connect(self.handle_tab_changed)
         self.ui.add_contact_btn.clicked.connect(self.handle_add_contact_btn_clicked)
 
-    def setup_settings_and_db(self):
-        self.settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "vista", "phone_book")
+    @staticmethod
+    def get_settings():
+        settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "vista", "phone_book")
         def_settings_path = os.path.join(os.path.dirname(__file__), "phone_book_defaults.ini")
-        self.default_settings = QSettings(def_settings_path, QSettings.IniFormat)
-        db.setup_db(self.settings, self.default_settings)
+        default_settings = QSettings(def_settings_path, QSettings.IniFormat)
+        return settings, default_settings
 
     def setup_tabs(self):
         tab_visited = False
         for letter_set in self.letter_sets + (self.rest_contacts_page_name,):
             tab = ContactsPage()
-            view = tab.tableView
+            view = tab.ui.tableView
             model = db.ContactsReadWriteModel(
                 self,
                 letter_set=letter_set if letter_set != self.rest_contacts_page_name else self.full_set,
                 exclude=letter_set == self.rest_contacts_page_name)
-            self.contact_model_view_pairs[letter_set] = (model, view, tab, tab_visited)
+            self.contacts_model_view_tab_tab_visited[letter_set] = (model, view, tab, tab_visited)
             view.setModel(model)
             view.hideColumn(0)
             self.ui.contacts_tab_widget.addTab(tab, letter_set)
@@ -277,11 +281,16 @@ class MainWindow(QMainWindow):
         auth_form.open()
 
     def log_out(self):
-        db.log_out(self.session_key)
         self.erase_session_key_from_storage()
         self.session_key = None
         self.is_authenticated = False
         self.auth_status_changed.emit()
+        try:
+            db.log_out(self.session_key)
+        except db.DatabaseConnectionError:
+            # Not critical because a session_key is erased &
+            # a database can delete it later on its own when it expires
+            pass
 
     def refresh_contacts_page(self, tab_or_tab_idx):
         if isinstance(tab_or_tab_idx, int):
@@ -289,12 +298,15 @@ class MainWindow(QMainWindow):
         else:
             idx = self.ui.contacts_tab_widget.indexOf(tab_or_tab_idx)
         text = self.ui.contacts_tab_widget.tabText(idx)
-        model, view, *_ = self.contact_model_view_pairs[text]
+        model, view, *_ = self.contacts_model_view_tab_tab_visited[text]
         model.refresh(self.session_key)
         view.hideColumn(0)
+        # from PyQt5.QtWidgets import QTableView, QHeaderView
+        # # view: QTableView
+        # view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
     def clear_contacts_pages(self):
-        for model, *_ in self.contact_model_view_pairs.values():
+        for model, *_ in self.contacts_model_view_tab_tab_visited.values():
             model.clear()
 
     def handle_log_in_out_btn_clicked(self):
@@ -317,7 +329,7 @@ class MainWindow(QMainWindow):
 
     def handle_tab_changed(self, idx):
         text = self.ui.contacts_tab_widget.tabText(idx)
-        model, view, _, tab_visited = self.contact_model_view_pairs[text]
+        model, view, _, tab_visited = self.contacts_model_view_tab_tab_visited[text]
         if not tab_visited:
             model.refresh(self.session_key)
             view.hideColumn(0)
@@ -329,7 +341,7 @@ class MainWindow(QMainWindow):
             if first_letter in letter_set.upper():
                 page_name = letter_set
                 break
-        *_, page, _ = self.contact_model_view_pairs[page_name]
+        *_, page, _ = self.contacts_model_view_tab_tab_visited[page_name]
         return page_name, page
 
     def handle_add_contact_btn_clicked(self):
@@ -347,10 +359,10 @@ class MainWindow(QMainWindow):
                 self.refresh_contacts_page(tab)
 
                 if tab is self.ui.contacts_tab_widget.currentWidget():
-                    QMessageBox.information(self, "Успех", "Контакт успешно добавлен на текущую страницу.")
+                    QMessageBox.information(self, "Телефонная книжка", "Контакт успешно добавлен на текущую страницу.")
                 else:
                     ans = QMessageBox.question(
-                        self, "Успех",
+                        self, "Телефонная книжка",
                         "Контакт добавлен успешно на страницу {}. Хотите перейти на неё?".format(page_name))
                     if ans == QMessageBox.Yes:
                         self.ui.contacts_tab_widget.setCurrentWidget(tab)
@@ -359,10 +371,11 @@ class MainWindow(QMainWindow):
                 page_name, tab = self.detect_page_where_contact_located(contact_name)
 
                 if tab is self.ui.contacts_tab_widget.currentWidget():
-                    QMessageBox.warning(self, "Неудача", "Контакт уже существует. Он находится на текущей странице.")
+                    QMessageBox.warning(self, "Телефонная книжка",
+                                        "Контакт уже существует. Он находится на текущей странице.")
                 else:
                     ans = QMessageBox.warning(
-                        self, "Неудача",
+                        self, "Телефонная книжка",
                         "Такой контакт уже существует. Он расположен на странице {}. ".format(page_name) +
                         "Хотите перейти на неё?",
                         buttons=QMessageBox.Yes | QMessageBox.No)
@@ -370,22 +383,27 @@ class MainWindow(QMainWindow):
                         self.ui.contacts_tab_widget.setCurrentWidget(tab)
 
             elif res_code is db.AddContactResult.INVALID_SESSION:
-                QMessageBox.warning(self, "Неудача", "Сессия истекла. Вам нужно войти заново.")
+                QMessageBox.warning(self, "Телефонная книжка", "Сессия истекла. Вам нужно войти заново.")
                 self.log_out()
             elif res_code is db.AddContactResult.UNKNOWN_ERROR:
-                QMessageBox.critical(self, "Проблема", "Возникла непредвиденная ошибка.")
+                QMessageBox.critical(self, "Телефонная книжка", "Возникла непредвиденная ошибка.")
             else:
                 raise RuntimeError("unknown member: {}".format(res_code))
 
         form.finished.connect(on_finished)
         form.open()
 
+    def setup_db(self):
+        db.setup_db(self.settings, self.default_settings)
+
     def show(self):
         super().show()
+        self.setup_db()
         self.restore_session_or_log_in()
 
     def closeEvent(self, event):
-        if not self.remember_me:
+        self.hide()
+        if not self.remember_me and self.is_authenticated:
             self.log_out()
         event.accept()
 
@@ -396,21 +414,21 @@ if __name__ == "__main__":
     parent_logger = logging.getLogger("phone_book")
     parent_logger.setLevel(logging.DEBUG)
     file_handler = logging.handlers.RotatingFileHandler("log.txt", maxBytes=2 ** 19, backupCount=1)
-    formatter = logging.Formatter(fmt='%(asctime)s - %(name)s- %(levelname)s - %(message)s')
+    formatter = logging.Formatter(fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     parent_logger.addHandler(file_handler)
 
     sys._original_excepthook = sys.excepthook
-    win = None
 
 
     def exception_hook(exctype, value, traceback):
         logger.exception("Unexpected error", exc_info=value)
         sys._original_excepthook(exctype, value, traceback)
-        if win is not None:
-            QMessageBox.critical(win, "Неожиданная ошибка", "Приложение будет закрыто")
+        msg_box = QMessageBox(QMessageBox.Critical, "Телефонная книжка",
+                              "Неожиданная ошибка. Приложение будет закрыто.")
+        msg_box.setDetailedText(str(value))
+        msg_box.exec()
         sys.exit(1)
-
 
     sys.excepthook = exception_hook
 
