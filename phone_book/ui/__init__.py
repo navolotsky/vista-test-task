@@ -2,7 +2,7 @@ from PyQt5 import QtCore
 from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QHeaderView
 
-from . import contact_data_form, contacts_page, register_form
+from . import contact_data_form, contacts_page, register_form, upcoming_birthdays_dialog
 from .auth_form import Ui_AuthForm
 from .contact_data_form import Ui_ContactDataForm
 from .delete_contact_dialog import Ui_DeleteContactDialog
@@ -31,3 +31,9 @@ class Ui_ContactsPage(contacts_page.Ui_ContactsPage):
         pal.setColor(QPalette.Inactive, QPalette.Highlight, pal.color(QPalette.Active, QPalette.Highlight))
         pal.setColor(QPalette.Inactive, QPalette.HighlightedText, pal.color(QPalette.Active, QPalette.HighlightedText))
         self.tableView.setPalette(pal)
+
+
+class Ui_UpcomingBirthdaysDialog(upcoming_birthdays_dialog.Ui_UpcomingBirthdaysDialog):
+    def setupUi(self, ContactsPage):
+        super().setupUi(ContactsPage)
+        self.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)

@@ -2,17 +2,17 @@ from types import SimpleNamespace
 from typing import Callable
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QWidget
+from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QStyle, QWidget
 
 from . import database as db
 from .msg_dialogs import show_db_conn_err_msg
-from .ui import Ui_ContactDataForm, Ui_ContactsPage, Ui_DeleteContactDialog
+from .ui import Ui_ContactDataForm, Ui_ContactsPage, Ui_DeleteContactDialog, Ui_UpcomingBirthdaysDialog
 
 
 class ContactsPage(QWidget):
     contact_selection_changed = pyqtSignal()
 
-    def __init__(self, model: db.ContactsReadWriteModel, parent=None):
+    def __init__(self, model: db.ContactsPageReadWriteModel, parent=None):
         super().__init__(parent)
         self.ui = Ui_ContactsPage()
         self.ui.setupUi(self)
@@ -136,3 +136,34 @@ class DeleteContactDialog(QDialog):
             self.accept()
         finally:
             self.ui.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
+
+
+class UpcomingBirthdaysDialog(QDialog):
+    def __init__(self, model: db.UpcomingBirthdaysReadModel, parent=None):
+        super().__init__(parent, Qt.FramelessWindowHint)
+        self.ui = Ui_UpcomingBirthdaysDialog()
+        self.ui.setupUi(self)
+        self.ui.button_box.rejected.connect(self.reject)
+        self.ui.button_box.accepted.connect(self.accept)
+
+        self.model = model
+        self.view.setModel(model)
+
+    def resizeWindowToColumns(self):
+        """adopted from https://stackoverflow.com/a/26960463"""
+        margins = self.layout().contentsMargins()
+        self.resize((
+                margins.left() + margins.right() +
+                self.view.frameWidth() * 2 +
+                self.view.verticalHeader().width() +
+                self.view.horizontalHeader().length() +
+                self.view.style().pixelMetric(QStyle.PM_ScrollBarExtent)
+        ), self.height())
+
+    @property
+    def view(self):
+        return self.ui.tableView
+
+    def refresh_data(self, session_key):
+        self.model.refresh(session_key)
+        self.view.hideColumn(0)

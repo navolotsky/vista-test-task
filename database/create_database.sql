@@ -2,7 +2,26 @@ CREATE DATABASE vista_test_task_phone_book CHARACTER SET utf8mb4 COLLATE utf8mb4
 
 USE vista_test_task_phone_book;
 
-CREATE USER vista_phone_book_user IDENTIFIED by 'public_password';
+
+-- *** Functions ***
+
+DELIMITER //
+
+CREATE FUNCTION seconds_to_next_birthday(birth_datetime DATETIME) RETURNS INT
+    NOT DETERMINISTIC
+BEGIN
+    DECLARE this_year_birthday DATE DEFAULT MAKEDATE(YEAR(CURRENT_DATE), DAYOFYEAR(birth_datetime));
+    DECLARE birth_time TIME DEFAULT CAST(birth_datetime AS TIME);
+    DECLARE birthday_datetime_this_year DATETIME DEFAULT TIMESTAMP(this_year_birthday, birth_time);
+    DECLARE next_birthday_datetime DATETIME DEFAULT CASE
+                                                        WHEN birthday_datetime_this_year > CURRENT_TIMESTAMP
+                                                            THEN birthday_datetime_this_year
+                                                        ELSE birthday_datetime_this_year + INTERVAL 1 YEAR
+        END;
+    RETURN TO_SECONDS(next_birthday_datetime) - TO_SECONDS(CURRENT_TIMESTAMP);
+END //
+
+DELIMITER ;
 
 
 -- *** Tables ***
@@ -267,8 +286,21 @@ BEGIN
 END;
 //
 
+CREATE PROCEDURE get_contacts_having_birthday_in_range(session_key CHAR(32), seconds INT)
+    NOT DETERMINISTIC
+    READS SQL DATA
+    COMMENT 'get contacts whose birthday is coming in `seconds` seconds'
+SELECT id, name, phone_number, birth_date
+FROM contacts
+WHERE owner_id = (SELECT user_id FROM sessions WHERE sessions.session_key = session_key LIMIT 1)
+  AND seconds_to_next_birthday(contacts.birth_date) < seconds;
+//
 
 DELIMITER ;
+
+
+-- *** User ***
+CREATE USER vista_phone_book_user IDENTIFIED by 'public_password';
 
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.check_session TO 'vista_phone_book_user';
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.register TO 'vista_phone_book_user';
@@ -280,3 +312,4 @@ GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.get_contacts TO 'vista_pho
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.add_contact TO 'vista_phone_book_user';
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.edit_contact TO 'vista_phone_book_user';
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.delete_contact TO 'vista_phone_book_user';
+GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.get_contacts_having_birthday_in_range TO 'vista_phone_book_user';

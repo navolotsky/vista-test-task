@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import NamedTuple, Optional, Tuple
+from typing import NamedTuple, Optional, Tuple, Union
 
 from PyQt5.QtCore import QDate, Qt
 from PyQt5.QtSql import QSqlQuery, QSqlQueryModel
@@ -234,14 +234,14 @@ class ContactData(NamedTuple):
     birth_date: QDate
 
 
-class ContactsReadWriteModel(QSqlQueryModel):
+class ContactsPageReadWriteModel(QSqlQueryModel):
     class Columns(Enum):
         primary_key = 0
         name = 1
         phone_number = 2
         birth_date = 3
 
-    def __init__(self, parent, letter_set, exclude=False):
+    def __init__(self, letter_set, exclude=False, parent=None):
         super().__init__(parent)
         self.letter_set = letter_set
         self.exclude = exclude
@@ -273,3 +273,27 @@ class ContactsReadWriteModel(QSqlQueryModel):
     def delete_contact(self, session_key, row_idx):
         contact_id = self.data(self.index(row_idx, self.Columns.primary_key.value), role=Qt.EditRole)
         return _delete_contact(session_key, contact_id)
+
+
+class UpcomingBirthdaysReadModel(QSqlQueryModel):
+    class RangeType(Enum):
+        DAY = "day"
+
+    def __init__(self, range_type: Union[RangeType, str], range_value: int, parent):
+        super().__init__(parent)
+
+        self.range_type = self.RangeType(range_type)
+        self.range_value = range_value
+
+        if self.range_type is self.RangeType.DAY:
+            self.seconds = self.range_value * 24 * 3600
+        else:
+            raise RuntimeError("unknown member: {}".format(self.range_type))
+
+    def refresh(self, session_key):
+        query = QSqlQuery(get_opened_db())
+        if not query.exec("CALL get_contacts_having_birthday_in_range('{}', {})".format(session_key, self.seconds)):
+            process_error(query)
+        self.setQuery(query)
+        for idx, value in enumerate(["Имя", "Телефон", "Дата рождения"], 1):
+            self.setHeaderData(idx, Qt.Horizontal, value)

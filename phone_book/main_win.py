@@ -6,7 +6,7 @@ from PyQt5.QtCore import QSettings, pyqtSignal
 from PyQt5.QtWidgets import QDialog, QMainWindow, QMessageBox
 
 from . import database as db
-from .contacts import AddContactForm, ContactsPage, DeleteContactDialog, EditContactForm
+from .contacts import AddContactForm, ContactsPage, DeleteContactDialog, EditContactForm, UpcomingBirthdaysDialog
 from .msg_dialogs import show_db_conn_err_msg, show_not_implemented_msg
 from .reg_auth import AuthForm
 from .ui import Ui_MainWindow
@@ -58,10 +58,9 @@ class MainWindow(QMainWindow):
 
     def setup_tabs(self):
         for letter_set in self.letter_sets + (self.rest_contacts_page_name,):
-            model = db.ContactsReadWriteModel(
-                self,
+            model = db.ContactsPageReadWriteModel(
                 letter_set=letter_set if letter_set != self.rest_contacts_page_name else self.full_letter_set,
-                exclude=letter_set == self.rest_contacts_page_name)
+                exclude=letter_set == self.rest_contacts_page_name, parent=self)
             tab = ContactsPage(model)
             tab.contact_selection_changed.connect(partial(self.handle_contact_selection_changed, tab))
             self.letter_set_to_contacts_page[letter_set] = tab
@@ -140,6 +139,7 @@ class MainWindow(QMainWindow):
         if self.is_authenticated:
             self.ui.label.setText("Вы вошли" + ("" if self.username is None else " как {}".format(self.username)))
             self.ui.log_in_out_btn.setText("Выйти")
+            self.show_birthdays_if_any()
             self.ui.add_contact_btn.setEnabled(True)
             self.ui.contacts_tab_widget.currentWidget().refresh_data(self.session_key)
         else:
@@ -322,3 +322,36 @@ class MainWindow(QMainWindow):
         form = DeleteContactDialog(cb, parent=self)
         form.finished.connect(partial(self.on_delete_contact_form_finished, form))
         form.open()
+
+    def show_birthdays_if_any(self):
+        self.settings.beginGroup(self.username)
+        try:
+            key = "notifications/birthdays/turned_on"
+            type_ = bool
+            def_val = self.default_settings.value(key, True, type_)
+            if not self.settings.value(key, def_val, type_):
+                return
+
+            key = "notifications/birthdays/range/type"
+            type_ = str
+            def_val = self.default_settings.value(key, "day", type_)
+            range_type = self.settings.value(key, def_val, type_)
+
+            key = "notifications/birthdays/range/value"
+            type_ = int
+            def_val = self.default_settings.value(key, 7, type_)
+            range_value = self.settings.value(key, def_val, type_)
+
+            model = db.UpcomingBirthdaysReadModel(range_type, range_value, parent=self)
+            dialog = UpcomingBirthdaysDialog(model, parent=self)
+            dialog.refresh_data(self.session_key)
+            if dialog.model.rowCount() > 0:
+                dialog.view.resizeColumnsToContents()
+
+                # dialog.adjustSize() <- this doesn't work although sizePolicy is set to Expanding,
+                # so have to use a kludge adopted from SO:
+                dialog.resizeWindowToColumns()
+
+                dialog.show()
+        finally:
+            self.settings.endGroup()
