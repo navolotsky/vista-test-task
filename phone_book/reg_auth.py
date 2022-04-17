@@ -1,3 +1,4 @@
+from functools import partial
 from types import SimpleNamespace
 
 from PyQt5.QtCore import Qt
@@ -21,7 +22,7 @@ class RegisterForm(QDialog):
     def handle_ok_btn_clicked(self):
         username = self.ui.username_ln_edt.text()
         email = self.ui.email_ln_edt.text()
-        birth_date = self.ui.birth_date_dt_edt.dateTime().toString("yyyy.MM.dd")
+        birth_date = self.ui.birth_date_dt_edt.date().toString("yyyy.MM.dd")
         # TODO: some input validaton
         try:
             self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
@@ -66,7 +67,7 @@ class AuthForm(QDialog):
         self.ui.cancel_btn.clicked.connect(self.reject)
         self.ui.show_password_chb.clicked.connect(self.handle_show_password_chb_clicked)
         self.ui.remember_me_chb.clicked.connect(self.handle_remember_me_chb_clicked)
-        self.ui.forgot_password_btn.clicked.connect(lambda: show_not_implemented_msg(self))
+        self.ui.forgot_password_btn.clicked.connect(partial(show_not_implemented_msg, self))
 
         self.result = SimpleNamespace(session_key=None, username=None, remember_me=remember_me)
 
@@ -116,7 +117,7 @@ class AuthForm(QDialog):
     def handle_register_button_clicked(self):
         form = RegisterForm(parent=self.parent())
         self.hide()
-        form.finished.connect(lambda r: self.on_register_form_finished(form, r))
+        form.finished.connect(partial(self.on_register_form_finished, form))
         form.open()
 
     def handle_show_password_chb_clicked(self, chb_active):

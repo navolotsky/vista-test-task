@@ -1,8 +1,8 @@
-import enum
+from enum import Enum
+from typing import NamedTuple, Optional, Tuple
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtSql import QSqlQuery
-from PyQt5.QtSql import QSqlQueryModel
+from PyQt5.QtCore import QDate, Qt
+from PyQt5.QtSql import QSqlQuery, QSqlQueryModel
 
 from .config import get_opened_db
 from .errors import process_error
@@ -26,7 +26,7 @@ def check_session_exists(session_key):
         db.close()
 
 
-class RegisterResult(enum.Enum):
+class RegisterResult(Enum):
     SUCCESS = "registered_successfully"
     UNKNOWN_ERROR = "unknown_error"
     USERNAME_EXISTS = "username_already_exists"
@@ -132,14 +132,14 @@ def get_contacts(session_key, letter_set, exclude):
         db.close()
 
 
-class AddContactResult(enum.Enum):
+class AddContactResult(Enum):
     SUCCESS = "added_successfully"
     UNKNOWN_ERROR = "unknown_error"
     INVALID_SESSION = "invalid_session_key"
     CONTACT_EXISTS = "contact_already_exists"
 
 
-def add_contact(session_key, name, phone_number, birth_date):
+def _add_contact(session_key, name, phone_number, birth_date) -> Tuple[AddContactResult, Optional[int]]:
     db = get_opened_db()
     try:
         query = QSqlQuery(db)
@@ -164,7 +164,56 @@ def add_contact(session_key, name, phone_number, birth_date):
         db.close()
 
 
+class EditContactResult(Enum):
+    SUCCESS = "edited_successfully"
+    UNKNOWN_ERROR = "unknown_error"
+    INVALID_SESSION = "invalid_session_key"
+    CONTACT_DOESNT_EXIST = "given_contact_doesnt_exist"
+    NO_AUTHORITY_TO_EDIT_CONTACT = "no_authority_to_edit_given_contact"
+    SAME_DATA_CONTACT_EXISTS = "same_data_contact_already_exists"
+
+
+def _edit_contact(session_key, contact_id, name, phone_number, birth_date) -> Tuple[EditContactResult, Optional[int]]:
+    db = get_opened_db()
+    try:
+        query = QSqlQuery(db)
+        query.prepare(
+            "CALL edit_contact(:session_key, :contact_id, :name, :phone_number, :birth_date, "
+            "@result_msg, @same_data_contact_id)")
+        query.bindValue(":session_key", session_key)
+        query.bindValue(":contact_id", contact_id)
+        query.bindValue(":name", name)
+        query.bindValue(":phone_number", phone_number)
+        query.bindValue(":birth_date", birth_date)
+        if not query.exec():
+            process_error(query)
+        if not query.exec("SELECT @result_msg, @same_data_contact_id"):
+            process_error(query)
+        if not query.next():
+            process_error(query)
+        else:
+            result_type = EditContactResult(query.value(0))
+            same_data_contact_id = query.value(1)
+            if same_data_contact_id is not None:
+                same_data_contact_id = int(same_data_contact_id)
+            return result_type, same_data_contact_id
+    finally:
+        db.close()
+
+
+class ContactData(NamedTuple):
+    name: str
+    phone_number: str
+    birth_date: QDate
+
+
 class ContactsReadWriteModel(QSqlQueryModel):
+    class Columns(Enum):
+        primary_key = 0
+        name = 1
+        phone_number = 2
+        birth_date = 3
+
     def __init__(self, parent, letter_set, exclude=False):
         super().__init__(parent)
         self.letter_set = letter_set
@@ -181,3 +230,15 @@ class ContactsReadWriteModel(QSqlQueryModel):
         self.setQuery(query)
         for idx, value in enumerate(["Имя", "Телефон", "Дата рождения"], 1):
             self.setHeaderData(idx, Qt.Horizontal, value)
+
+    def get_contact_data(self, row_idx: int) -> ContactData:
+        return ContactData(self.data(self.index(row_idx, self.Columns.name.value), role=Qt.EditRole),
+                           self.data(self.index(row_idx, self.Columns.phone_number.value), role=Qt.EditRole),
+                           self.data(self.index(row_idx, self.Columns.birth_date.value), role=Qt.EditRole))
+
+    def add_contact(self, session_key, name, phone_number, birth_date):
+        return _add_contact(session_key, name, phone_number, birth_date)
+
+    def edit_contact(self, session_key, row_idx, name, phone_number, birth_date):
+        contact_id = self.data(self.index(row_idx, self.Columns.primary_key.value), role=Qt.EditRole)
+        return _edit_contact(session_key, contact_id, name, phone_number, birth_date)

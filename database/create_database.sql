@@ -174,6 +174,64 @@ BEGIN
 END;
 //
 
+CREATE PROCEDURE edit_contact(session_key CHAR(32), contact_id INT, name VARCHAR(255), phone_number VARCHAR(15),
+                              birth_date DATE,
+                              OUT result VARCHAR(255), OUT same_data_contact_id INT)
+    NOT DETERMINISTIC
+    MODIFIES SQL DATA
+    COMMENT 'edit the given contact or return existed contact\'s id with the same data'
+main:
+BEGIN
+    DECLARE owner_id INT;
+    SET owner_id = (SELECT user_id FROM sessions WHERE sessions.session_key = session_key LIMIT 1);
+    IF owner_id IS NULL THEN
+        SET result = 'invalid_session_key';
+        LEAVE main;
+    END IF;
+
+    IF NOT EXISTS(SELECT 42 FROM contacts WHERE contacts.id = contact_id) THEN
+        SET result = 'given_contact_doesnt_exist';
+        LEAVE main;
+    END IF;
+
+    IF NOT EXISTS(SELECT 42 FROM contacts WHERE contacts.id = contact_id and contacts.owner_id = owner_id) THEN
+        SET result = 'no_authority_to_edit_given_contact';
+        LEAVE main;
+    END IF;
+
+    SET same_data_contact_id = (SELECT id
+                                FROM contacts as c
+                                WHERE c.owner_id = owner_id
+                                  AND c.name = name
+                                  AND c.phone_number = phone_number
+                                  AND c.birth_date = birth_date
+                                LIMIT 1);
+    IF same_data_contact_id IS NOT NULL THEN
+        SET result = 'same_data_contact_already_exists';
+        LEAVE main;
+    END IF;
+
+    UPDATE contacts as c
+    SET c.name         = name,
+        c.phone_number = phone_number,
+        c.birth_date   = birth_date
+    WHERE c.id = contact_id;
+
+    IF EXISTS(SELECT 42
+              FROM contacts as c
+              WHERE c.id = contact_id
+                AND c.owner_id = owner_id
+                AND c.name = name
+                AND c.phone_number = phone_number
+                AND c.birth_date = birth_date) THEN
+        SET result = 'edited_successfully';
+    ELSE
+        SET result = 'unknown_error';
+    END IF;
+END;
+//
+
+
 DELIMITER ;
 
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.check_session TO 'vista_phone_book_user';
@@ -184,3 +242,4 @@ GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.get_user_info TO 'vista_ph
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.get_all_contacts TO 'vista_phone_book_user';
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.get_contacts TO 'vista_phone_book_user';
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.add_contact TO 'vista_phone_book_user';
+GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.edit_contact TO 'vista_phone_book_user';

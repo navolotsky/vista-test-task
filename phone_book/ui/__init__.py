@@ -1,4 +1,5 @@
 from PyQt5 import QtCore
+from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QHeaderView
 
 from . import contact_data_form, contacts_page, register_form
@@ -17,6 +18,7 @@ class Ui_RegisterForm(register_form.Ui_RegisterForm):
 class Ui_ContactDataForm(contact_data_form.Ui_ContactDataForm):
     def setupUi(self, ContactDataForm):
         super().setupUi(ContactDataForm)
+        self.birth_date_dt_edt.setMaximumDate(QtCore.QDate.currentDate())
         self.name_ln_edt.setFocus()
 
 
@@ -24,3 +26,7 @@ class Ui_ContactsPage(contacts_page.Ui_ContactsPage):
     def setupUi(self, ContactsPage):
         super().setupUi(ContactsPage)
         self.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        pal = self.tableView.palette()
+        pal.setColor(QPalette.Inactive, QPalette.Highlight, pal.color(QPalette.Active, QPalette.Highlight))
+        pal.setColor(QPalette.Inactive, QPalette.HighlightedText, pal.color(QPalette.Active, QPalette.HighlightedText))
+        self.tableView.setPalette(pal)

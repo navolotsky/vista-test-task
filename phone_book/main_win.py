@@ -1,11 +1,12 @@
 import os.path
+from functools import partial
 from typing import Dict, Tuple
 
 from PyQt5.QtCore import QSettings, pyqtSignal
 from PyQt5.QtWidgets import QDialog, QMainWindow, QMessageBox
 
 from . import database as db
-from .contacts import AddContactForm, ContactsPage
+from .contacts import AddContactForm, ContactsPage, EditContactForm
 from .msg_dialogs import show_db_conn_err_msg, show_not_implemented_msg
 from .reg_auth import AuthForm
 from .ui import Ui_MainWindow
@@ -13,15 +14,17 @@ from .ui import Ui_MainWindow
 
 class MainWindow(QMainWindow):
     auth_status_changed = pyqtSignal()
+    contact_edited = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.ui.log_in_out_btn.clicked.connect(self.handle_log_in_out_btn_clicked)
-        self.ui.settings_btn.clicked.connect(lambda: show_not_implemented_msg(self))
+        self.ui.settings_btn.clicked.connect(partial(show_not_implemented_msg, self))
         self.ui.contacts_tab_widget.currentChanged.connect(self.handle_tab_changed)
         self.ui.add_contact_btn.clicked.connect(self.handle_add_contact_btn_clicked)
+        self.ui.edit_contact_btn.clicked.connect(self.handle_edit_contact_btn_clicked)
 
         self.auth_status_changed.connect(self.handle_auth_status_changed)
 
@@ -46,6 +49,12 @@ class MainWindow(QMainWindow):
         default_settings = QSettings(def_settings_path, QSettings.IniFormat)
         return settings, default_settings
 
+    def handle_contact_selection_changed(self, page_where_changed: ContactsPage):
+        if page_where_changed is self.ui.contacts_tab_widget.currentWidget():
+            is_selection_empty = page_where_changed.is_selection_empty()
+            self.ui.edit_contact_btn.setDisabled(is_selection_empty)
+            self.ui.delete_contact_btn.setDisabled(is_selection_empty)
+
     def setup_tabs(self):
         for letter_set in self.letter_sets + (self.rest_contacts_page_name,):
             model = db.ContactsReadWriteModel(
@@ -53,7 +62,7 @@ class MainWindow(QMainWindow):
                 letter_set=letter_set if letter_set != self.rest_contacts_page_name else self.full_letter_set,
                 exclude=letter_set == self.rest_contacts_page_name)
             tab = ContactsPage(model)
-            tab.contact_selected.connect(self.handle_contacts_table_row_clicked)
+            tab.contact_selection_changed.connect(partial(self.handle_contact_selection_changed, tab))
             self.letter_set_to_contacts_page[letter_set] = tab
             self.ui.contacts_tab_widget.addTab(tab, letter_set)
 
@@ -105,7 +114,7 @@ class MainWindow(QMainWindow):
             return
 
         form = AuthForm(self.remember_me, parent=self)
-        form.finished.connect(lambda r: self.on_auth_form_finished(form, r))
+        form.finished.connect(partial(self.on_auth_form_finished, form))
         form.open()
 
     def log_out(self):
@@ -145,10 +154,12 @@ class MainWindow(QMainWindow):
             page.clear_data()
 
     def handle_tab_changed(self, idx):
-        self.ui.edit_contact_btn.setDisabled(True)
-        self.ui.delete_contact_btn.setDisabled(True)
-
         page: ContactsPage = self.ui.contacts_tab_widget.widget(idx)
+
+        is_selection_empty = page.is_selection_empty()
+        self.ui.edit_contact_btn.setDisabled(is_selection_empty)
+        self.ui.delete_contact_btn.setDisabled(is_selection_empty)
+
         if self.is_authenticated and not page.is_data_fetched:
             page.fetch_data_first_time(self.session_key)
 
@@ -205,10 +216,73 @@ class MainWindow(QMainWindow):
             raise RuntimeError("unknown member: {}".format(res_code))
 
     def handle_add_contact_btn_clicked(self):
-        form = AddContactForm(self.session_key, parent=self)
-        form.finished.connect(lambda r: self.on_add_contact_form_finished(form, r))
+        page: ContactsPage = self.ui.contacts_tab_widget.currentWidget()
+        cb = partial(page.model.add_contact, self.session_key)
+        form = AddContactForm(cb, parent=self)
+        form.finished.connect(partial(self.on_add_contact_form_finished, form))
         form.open()
 
-    def handle_contacts_table_row_clicked(self):
-        self.ui.edit_contact_btn.setEnabled(True)
-        self.ui.delete_contact_btn.setEnabled(True)
+    def on_edit_contact_form_finished(self, form: EditContactForm, r: QDialog.DialogCode):
+        if r == QDialog.Rejected:
+            return
+
+        res_code, contact_new_name = form.result.code, form.result.contact_new_name
+
+        if res_code is db.EditContactResult.SUCCESS:
+            page_name, page = self.detect_page_where_contact_located(contact_new_name)
+            current_page = self.ui.contacts_tab_widget.currentWidget()
+            current_page.refresh_data(self.session_key)
+            if current_page is not page:
+                page.refresh_data(self.session_key)
+
+            if page is current_page:
+                QMessageBox.information(self, "Телефонная книжка", "Контакт отредактирован.")
+            else:
+                ans = QMessageBox.question(
+                    self, "Телефонная книжка",
+                    "Контакт отредактирован и перенесен на страницу {}. Хотите перейти на неё?".format(page_name))
+                if ans == QMessageBox.Yes:
+                    self.ui.contacts_tab_widget.setCurrentWidget(page)
+
+        elif res_code is db.EditContactResult.SAME_DATA_CONTACT_EXISTS:
+            page_name, page = self.detect_page_where_contact_located(contact_new_name)
+            current_page = self.ui.contacts_tab_widget.currentWidget()
+
+            if page is current_page:
+                QMessageBox.warning(self, "Телефонная книжка",
+                                    "Контакт с такими данными уже существует.\nОн находится на текущей странице.")
+            else:
+                ans = QMessageBox.warning(
+                    self, "Телефонная книжка",
+                    "Контакт с такими данными уже существует.\n"
+                    "Он расположен на странице {}. ".format(page_name) + "Хотите перейти на неё?",
+                    buttons=QMessageBox.Yes | QMessageBox.No)
+                if ans == QMessageBox.Yes:
+                    self.ui.contacts_tab_widget.setCurrentWidget(page)
+
+        elif res_code is db.EditContactResult.NO_AUTHORITY_TO_EDIT_CONTACT:
+            QMessageBox.warning(self, "Телефонная книжка", "У вас нет прав на редактирование данного контакта.")
+        elif res_code is db.EditContactResult.INVALID_SESSION:
+            QMessageBox.warning(self, "Телефонная книжка", "Сессия истекла. Вам нужно войти заново.")
+            self.log_out()
+        elif res_code is db.EditContactResult.UNKNOWN_ERROR:
+            QMessageBox.critical(self, "Телефонная книжка", "Возникла непредвиденная ошибка.")
+        else:
+            raise RuntimeError("unknown member: {}".format(res_code))
+
+    def handle_edit_contact_btn_clicked(self):
+        page: ContactsPage = self.ui.contacts_tab_widget.currentWidget()
+        rows = set(idx.row() for idx in page.view.selectedIndexes())
+        if len(rows) > 1:
+            raise RuntimeError(
+                "for `page.view` expected: "
+                "1) `selectionMode` property to be `QTableView.SingleSelection`; "
+                "2) `selectionBehavior` property to be `QTableView.SelectRows`")
+        elif len(rows) == 0:
+            raise RuntimeError("no rows selected")
+        contact_row_idx = rows.pop()
+        data = page.model.get_contact_data(contact_row_idx)
+        cb = partial(page.model.edit_contact, self.session_key, contact_row_idx)
+        form = EditContactForm(cb, data.name, data.phone_number, data.birth_date, parent=page.view)
+        form.finished.connect(partial(self.on_edit_contact_form_finished, form))
+        form.open()
