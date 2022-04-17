@@ -6,7 +6,7 @@ from PyQt5.QtCore import QSettings, pyqtSignal
 from PyQt5.QtWidgets import QDialog, QMainWindow, QMessageBox
 
 from . import database as db
-from .contacts import AddContactForm, ContactsPage, EditContactForm
+from .contacts import AddContactForm, ContactsPage, DeleteContactDialog, EditContactForm
 from .msg_dialogs import show_db_conn_err_msg, show_not_implemented_msg
 from .reg_auth import AuthForm
 from .ui import Ui_MainWindow
@@ -25,6 +25,7 @@ class MainWindow(QMainWindow):
         self.ui.contacts_tab_widget.currentChanged.connect(self.handle_tab_changed)
         self.ui.add_contact_btn.clicked.connect(self.handle_add_contact_btn_clicked)
         self.ui.edit_contact_btn.clicked.connect(self.handle_edit_contact_btn_clicked)
+        self.ui.delete_contact_btn.clicked.connect(self.handle_delete_contact_btn_clicked)
 
         self.auth_status_changed.connect(self.handle_auth_status_changed)
 
@@ -260,6 +261,8 @@ class MainWindow(QMainWindow):
                 if ans == QMessageBox.Yes:
                     self.ui.contacts_tab_widget.setCurrentWidget(page)
 
+        elif res_code is db.EditContactResult.CONTACT_DOESNT_EXIST:
+            QMessageBox.warning(self, "Телефонная книжка", "Не удалось отредактировать: контакт не существует.")
         elif res_code is db.EditContactResult.NO_AUTHORITY_TO_EDIT_CONTACT:
             QMessageBox.warning(self, "Телефонная книжка", "У вас нет прав на редактирование данного контакта.")
         elif res_code is db.EditContactResult.INVALID_SESSION:
@@ -270,8 +273,7 @@ class MainWindow(QMainWindow):
         else:
             raise RuntimeError("unknown member: {}".format(res_code))
 
-    def handle_edit_contact_btn_clicked(self):
-        page: ContactsPage = self.ui.contacts_tab_widget.currentWidget()
+    def _get_contacts_page_selected_row_idx(self, page: ContactsPage) -> int:
         rows = set(idx.row() for idx in page.view.selectedIndexes())
         if len(rows) > 1:
             raise RuntimeError(
@@ -280,9 +282,43 @@ class MainWindow(QMainWindow):
                 "2) `selectionBehavior` property to be `QTableView.SelectRows`")
         elif len(rows) == 0:
             raise RuntimeError("no rows selected")
-        contact_row_idx = rows.pop()
+        return rows.pop()
+
+    def handle_edit_contact_btn_clicked(self):
+        page: ContactsPage = self.ui.contacts_tab_widget.currentWidget()
+        contact_row_idx = self._get_contacts_page_selected_row_idx(page)
         data = page.model.get_contact_data(contact_row_idx)
         cb = partial(page.model.edit_contact, self.session_key, contact_row_idx)
-        form = EditContactForm(cb, data.name, data.phone_number, data.birth_date, parent=page.view)
+        form = EditContactForm(cb, data.name, data.phone_number, data.birth_date, parent=self)
         form.finished.connect(partial(self.on_edit_contact_form_finished, form))
+        form.open()
+
+    def on_delete_contact_form_finished(self, form: DeleteContactDialog, r: QDialog.DialogCode):
+        if r == QDialog.Rejected:
+            return
+
+        res_code = form.result.code
+
+        if res_code is db.DeleteContactResult.SUCCESS:
+            current_page = self.ui.contacts_tab_widget.currentWidget()
+            current_page.refresh_data(self.session_key)
+            QMessageBox.information(self, "Телефонная книжка", "Контакт успешно удален.")
+        elif res_code is db.DeleteContactResult.CONTACT_DOESNT_EXIST:
+            QMessageBox.warning(self, "Телефонная книжка", "Не удалось удалить: контакт уже не существует.")
+        elif res_code is db.DeleteContactResult.NO_AUTHORITY_TO_DELETE_CONTACT:
+            QMessageBox.warning(self, "Телефонная книжка", "У вас нет прав на удаление данного контакта.")
+        elif res_code is db.DeleteContactResult.INVALID_SESSION:
+            QMessageBox.warning(self, "Телефонная книжка", "Сессия истекла. Вам нужно войти заново.")
+            self.log_out()
+        elif res_code is db.DeleteContactResult.UNKNOWN_ERROR:
+            QMessageBox.critical(self, "Телефонная книжка", "Возникла непредвиденная ошибка.")
+        else:
+            raise RuntimeError("unknown member: {}".format(res_code))
+
+    def handle_delete_contact_btn_clicked(self):
+        page: ContactsPage = self.ui.contacts_tab_widget.currentWidget()
+        contact_row_idx = self._get_contacts_page_selected_row_idx(page)
+        cb = partial(page.model.delete_contact, self.session_key, contact_row_idx)
+        form = DeleteContactDialog(cb, parent=self)
+        form.finished.connect(partial(self.on_delete_contact_form_finished, form))
         form.open()

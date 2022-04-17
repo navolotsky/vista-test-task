@@ -201,6 +201,33 @@ def _edit_contact(session_key, contact_id, name, phone_number, birth_date) -> Tu
         db.close()
 
 
+class DeleteContactResult(Enum):
+    SUCCESS = "deleted_successfully"
+    UNKNOWN_ERROR = "unknown_error"
+    INVALID_SESSION = "invalid_session_key"
+    CONTACT_DOESNT_EXIST = "given_contact_doesnt_exist"
+    NO_AUTHORITY_TO_DELETE_CONTACT = "no_authority_to_delete_given_contact"
+
+
+def _delete_contact(session_key, contact_id) -> DeleteContactResult:
+    db = get_opened_db()
+    try:
+        query = QSqlQuery(db)
+        query.prepare("CALL delete_contact(:session_key, :contact_id, @result_msg)")
+        query.bindValue(":session_key", session_key)
+        query.bindValue(":contact_id", contact_id)
+        if not query.exec():
+            process_error(query)
+        if not query.exec("SELECT @result_msg"):
+            process_error(query)
+        if not query.next():
+            process_error(query)
+        else:
+            return DeleteContactResult(query.value(0))
+    finally:
+        db.close()
+
+
 class ContactData(NamedTuple):
     name: str
     phone_number: str
@@ -242,3 +269,7 @@ class ContactsReadWriteModel(QSqlQueryModel):
     def edit_contact(self, session_key, row_idx, name, phone_number, birth_date):
         contact_id = self.data(self.index(row_idx, self.Columns.primary_key.value), role=Qt.EditRole)
         return _edit_contact(session_key, contact_id, name, phone_number, birth_date)
+
+    def delete_contact(self, session_key, row_idx):
+        contact_id = self.data(self.index(row_idx, self.Columns.primary_key.value), role=Qt.EditRole)
+        return _delete_contact(session_key, contact_id)

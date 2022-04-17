@@ -4,6 +4,7 @@ USE vista_test_task_phone_book;
 
 CREATE USER vista_phone_book_user IDENTIFIED by 'public_password';
 
+
 -- *** Tables ***
 
 CREATE TABLE users
@@ -231,6 +232,41 @@ BEGIN
 END;
 //
 
+CREATE PROCEDURE delete_contact(session_key CHAR(32), contact_id INT, OUT result VARCHAR(255))
+    NOT DETERMINISTIC
+    MODIFIES SQL DATA
+    COMMENT 'delete the given contact'
+main:
+BEGIN
+    DECLARE owner_id INT;
+    SET owner_id = (SELECT user_id FROM sessions WHERE sessions.session_key = session_key LIMIT 1);
+    IF owner_id IS NULL THEN
+        SET result = 'invalid_session_key';
+        LEAVE main;
+    END IF;
+
+    IF NOT EXISTS(SELECT 42 FROM contacts WHERE contacts.id = contact_id) THEN
+        SET result = 'given_contact_doesnt_exist';
+        LEAVE main;
+    END IF;
+
+    IF NOT EXISTS(SELECT 42 FROM contacts WHERE contacts.id = contact_id and contacts.owner_id = owner_id) THEN
+        SET result = 'no_authority_to_delete_given_contact';
+        LEAVE main;
+    END IF;
+
+    DELETE
+    FROM contacts
+    WHERE contacts.id = contact_id;
+
+    IF NOT EXISTS(SELECT 42 FROM contacts WHERE contacts.id = contact_id) THEN
+        SET result = 'deleted_successfully';
+    ELSE
+        SET result = 'unknown_error';
+    END IF;
+END;
+//
+
 
 DELIMITER ;
 
@@ -243,3 +279,4 @@ GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.get_all_contacts TO 'vista
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.get_contacts TO 'vista_phone_book_user';
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.add_contact TO 'vista_phone_book_user';
 GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.edit_contact TO 'vista_phone_book_user';
+GRANT EXECUTE ON PROCEDURE vista_test_task_phone_book.delete_contact TO 'vista_phone_book_user';

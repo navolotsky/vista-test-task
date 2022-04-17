@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QHeaderView
 from . import contact_data_form, contacts_page, register_form
 from .auth_form import Ui_AuthForm
 from .contact_data_form import Ui_ContactDataForm
+from .delete_contact_dialog import Ui_DeleteContactDialog
 from .main_window import Ui_MainWindow
 
 

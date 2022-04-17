@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QWidget
 
 from . import database as db
 from .msg_dialogs import show_db_conn_err_msg
-from .ui import Ui_ContactDataForm, Ui_ContactsPage
+from .ui import Ui_ContactDataForm, Ui_ContactsPage, Ui_DeleteContactDialog
 
 
 class ContactsPage(QWidget):
@@ -109,6 +109,30 @@ class EditContactForm(ContactDataForm):
             self.close()  # Unfortunately, a user will have to fill a form again
         else:
             self.result.contact_new_name = name
+            self.accept()
+        finally:
+            self.ui.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
+
+
+class DeleteContactDialog(QDialog):
+    def __init__(self, delete_contact_cb: Callable, parent=None):
+        super().__init__(parent, Qt.FramelessWindowHint)
+        self.ui = Ui_DeleteContactDialog()
+        self.ui.setupUi(self)
+        self.ui.button_box.rejected.connect(self.reject)
+        self.ui.button_box.accepted.connect(self.handle_ok_btn_clicked)
+
+        self.delete_contact_cb = delete_contact_cb
+        self.result = SimpleNamespace(code=None)
+
+    def handle_ok_btn_clicked(self):
+        try:
+            self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
+            self.result.code = self.delete_contact_cb()
+        except db.DatabaseConnectionError:
+            show_db_conn_err_msg(self)
+            self.close()
+        else:
             self.accept()
         finally:
             self.ui.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
