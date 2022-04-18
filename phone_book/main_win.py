@@ -7,13 +7,15 @@ from PyQt5.QtWidgets import QDialog, QMainWindow, QMessageBox
 
 from . import database as db
 from .contacts import AddContactForm, ContactsPage, DeleteContactDialog, EditContactForm, UpcomingBirthdaysDialog
-from .msg_dialogs import show_db_conn_err_msg, show_not_implemented_msg
+from .msg_dialogs import show_db_conn_err_msg
 from .reg_auth import AuthForm
+from .settings_dialog import SettingsDialog, SettingsDialogFieldValues
 from .ui import Ui_MainWindow
 
 
 class MainWindow(QMainWindow):
     auth_status_changed = pyqtSignal()
+    database_settings_changed = pyqtSignal()
     contact_edited = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -21,15 +23,18 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.ui.log_in_out_btn.clicked.connect(self.handle_log_in_out_btn_clicked)
-        self.ui.settings_btn.clicked.connect(partial(show_not_implemented_msg, self))
+        self.ui.settings_btn.clicked.connect(self.handle_settings_btn_clicked)
         self.ui.contacts_tab_widget.currentChanged.connect(self.handle_tab_changed)
         self.ui.add_contact_btn.clicked.connect(self.handle_add_contact_btn_clicked)
         self.ui.edit_contact_btn.clicked.connect(self.handle_edit_contact_btn_clicked)
         self.ui.delete_contact_btn.clicked.connect(self.handle_delete_contact_btn_clicked)
 
         self.auth_status_changed.connect(self.handle_auth_status_changed)
+        self.database_settings_changed.connect(self.handle_database_settings_changed)
 
         self.settings, self.default_settings = self.get_settings()
+        if self.settings is self.default_settings:
+            raise RuntimeError
 
         self.session_key = self.read_session_key_from_storage()
         self.username = None
@@ -80,10 +85,27 @@ class MainWindow(QMainWindow):
     def setup_db(self):
         db.setup_db(self.settings, self.default_settings)
 
+    def welcome_if_first_run(self):
+        key = "first_run"
+        type_ = bool
+        def_val = self.default_settings.value(key, True, type_)
+        is_first_run = self.settings.value(key, def_val, type_)
+        is_show_settings = False
+        if is_first_run:
+            r = QMessageBox.question(self, "Телефонная книжка",
+                                     "Добро пожаловать!\n\nХотите проверить настройки перед началом работы?")
+            self.settings.setValue(key, False)
+            if r == QMessageBox.Yes:
+                is_show_settings = True
+        return is_show_settings
+
     def show(self):
         super().show()
         self.setup_db()
-        self.restore_session_or_log_in()
+        if self.welcome_if_first_run():
+            self.show_settings_dialog(self.restore_session_or_log_in)
+        else:
+            self.restore_session_or_log_in()
 
     def closeEvent(self, event):
         self.hide()
@@ -109,8 +131,8 @@ class MainWindow(QMainWindow):
                 self.is_authenticated = True
                 self.auth_status_changed.emit()
                 return
-        except db.DatabaseConnectionError:
-            show_db_conn_err_msg(self)
+        except db.DatabaseConnectionError as exc:
+            show_db_conn_err_msg(details=str(exc), parent=self)
             return
 
         form = AuthForm(self.remember_me, parent=self)
@@ -148,6 +170,13 @@ class MainWindow(QMainWindow):
             self.ui.add_contact_btn.setDisabled(True)
             self.clear_contacts_pages()
 
+    def handle_database_settings_changed(self):
+        if self.is_authenticated:
+            self.log_out()
+            QMessageBox.information(self, "Телефонная книжка", "Настройки подключения к базе данных изменены.\n"
+                                                               "Вам придется войти заново.")
+        self.setup_db()
+
     def clear_contacts_pages(self):
         tab_widget = self.ui.contacts_tab_widget
         for idx in range(tab_widget.count()):
@@ -162,7 +191,11 @@ class MainWindow(QMainWindow):
         self.ui.delete_contact_btn.setDisabled(is_selection_empty)
 
         if self.is_authenticated and not page.is_data_fetched:
-            page.fetch_data_first_time(self.session_key)
+            try:
+                page.fetch_data_first_time(self.session_key)
+            except db.DatabaseConnectionError as exc:
+                show_db_conn_err_msg(details=str(exc), parent=self)
+                self.close()
 
     def detect_page_where_contact_located(self, contact_name: str) -> Tuple[str, ContactsPage]:
         first_letter = contact_name[0].upper()
@@ -324,34 +357,126 @@ class MainWindow(QMainWindow):
         form.open()
 
     def show_birthdays_if_any(self):
-        self.settings.beginGroup(self.username)
+        key = "notifications/birthdays/turned_on"
+        type_ = bool
+        def_val = self.default_settings.value(key, True, type_)
+        if not self.settings.value(key, def_val, type_):
+            return
+
+        key = "notifications/birthdays/range/type"
+        type_ = str
+        def_val = self.default_settings.value(key, "day", type_)
+        range_type = self.settings.value(key, def_val, type_)
+
+        key = "notifications/birthdays/range/value"
+        type_ = int
+        def_val = self.default_settings.value(key, 7, type_)
+        range_value = self.settings.value(key, def_val, type_)
+
+        model = db.UpcomingBirthdaysReadModel(range_type, range_value, parent=self)
+        dialog = UpcomingBirthdaysDialog(model, parent=self)
+        dialog.refresh_data(self.session_key)
+        if dialog.model.rowCount() > 0:
+            dialog.view.resizeColumnsToContents()
+
+            # dialog.adjustSize() <- this doesn't work although sizePolicy is set to Expanding,
+            # so have to use a kludge adopted from SO:
+            dialog.resizeWindowToColumns()
+
+            dialog.show()
+
+    def _get_settings_dialog_fields_values(self, defaults=False) -> SettingsDialogFieldValues:
+        result = {}
+        self.settings.beginGroup("database")
+        self.default_settings.beginGroup("database")
         try:
-            key = "notifications/birthdays/turned_on"
-            type_ = bool
-            def_val = self.default_settings.value(key, True, type_)
-            if not self.settings.value(key, def_val, type_):
-                return
-
-            key = "notifications/birthdays/range/type"
-            type_ = str
-            def_val = self.default_settings.value(key, "day", type_)
-            range_type = self.settings.value(key, def_val, type_)
-
-            key = "notifications/birthdays/range/value"
-            type_ = int
-            def_val = self.default_settings.value(key, 7, type_)
-            range_value = self.settings.value(key, def_val, type_)
-
-            model = db.UpcomingBirthdaysReadModel(range_type, range_value, parent=self)
-            dialog = UpcomingBirthdaysDialog(model, parent=self)
-            dialog.refresh_data(self.session_key)
-            if dialog.model.rowCount() > 0:
-                dialog.view.resizeColumnsToContents()
-
-                # dialog.adjustSize() <- this doesn't work although sizePolicy is set to Expanding,
-                # so have to use a kludge adopted from SO:
-                dialog.resizeWindowToColumns()
-
-                dialog.show()
+            for key in ("host_name", "port", "database_name", "username", "password", "qsql_driver"):
+                type_ = int if key == "port" else str
+                def_val = self.default_settings.value(key, type=type_)
+                result[key] = self.settings.value(key, def_val, type_) if not defaults else def_val
         finally:
             self.settings.endGroup()
+            self.default_settings.endGroup()
+
+        key = "notifications/birthdays/turned_on"
+        type_ = bool
+        def_val = self.default_settings.value(key, True, type_)
+        result[key.replace("/", "_")] = self.settings.value(key, def_val, type_) if not defaults else def_val
+
+        key = "notifications/birthdays/range/value"
+        type_ = int
+        def_val = self.default_settings.value(key, 7, type_)
+        result[key.replace("/", "_")] = self.settings.value(key, def_val, type_) if not defaults else def_val
+
+        return SettingsDialogFieldValues(**result)
+
+    def set_settings(self, values: SettingsDialogFieldValues):
+        is_db_settings_changed = False
+        is_settings_changed = False
+        new_settings = values._asdict()
+
+        try:
+            self.settings.beginGroup("database")
+            self.default_settings.beginGroup("database")
+            try:
+                for key in ("host_name", "port", "database_name", "username", "password", "qsql_driver"):
+                    type_ = int if key == "port" else str
+                    new_val = new_settings[key]
+                    def_val = self.default_settings.value(key, type=type_)
+                    cur_val = self.settings.value(key, def_val, type_)
+                    if new_val != cur_val:
+                        is_settings_changed = is_db_settings_changed = True
+                        if new_val != def_val:
+                            self.settings.setValue(key, new_val)
+                        else:
+                            self.settings.remove(key)
+            finally:
+                self.settings.endGroup()
+                self.default_settings.endGroup()
+
+            for key, type_ in (("notifications/birthdays/turned_on", bool),
+                               ("notifications/birthdays/range/value", int)):
+                new_val = new_settings[key.replace("/", "_")]
+                def_val = self.default_settings.value(key, True, type_)
+                cur_val = self.settings.value(key, def_val, type_)
+                if new_val != cur_val:
+                    is_settings_changed = True
+                    if new_val != def_val:
+                        self.settings.setValue(key, new_val)
+                    else:
+                        self.settings.remove(key)
+        finally:
+            if is_settings_changed:
+                self.settings.sync()
+            if is_db_settings_changed:
+                self.database_settings_changed.emit()
+
+    def on_settings_dialog_finished(self, initial_values, dialog: SettingsDialog, r: QDialog.DialogCode):
+        if r == QDialog.Rejected or not dialog.result.changed_settings_saving_requested:
+            return
+        if dialog.result.field_values != initial_values:
+            self.set_settings(dialog.result.field_values)
+
+    @staticmethod
+    def _setting_dialog_check_db_connection_cb(settings_values: SettingsDialogFieldValues):
+        filtered = dict([(key, value) for (key, value) in settings_values._asdict().items() if
+                         key in ("host_name", "port", "database_name", "username", "password", "qsql_driver")])
+        return db.check_db_connection_settings(**filtered)
+
+    def _setup_settings_dialog(self):
+        initial_values = self._get_settings_dialog_fields_values()
+        dialog = SettingsDialog(initial_field_values=initial_values,
+                                get_defaults_cb=partial(self._get_settings_dialog_fields_values, defaults=True),
+                                check_db_connection_cb=self._setting_dialog_check_db_connection_cb,
+                                parent=self)
+        dialog.finished.connect(partial(self.on_settings_dialog_finished, initial_values, dialog))
+        return dialog
+
+    def show_settings_dialog(self, on_finished_cb=None):
+        dialog = self._setup_settings_dialog()
+        if on_finished_cb is not None:
+            dialog.finished.connect(on_finished_cb)
+        dialog.open()
+
+    def handle_settings_btn_clicked(self):
+        self._setup_settings_dialog().open()

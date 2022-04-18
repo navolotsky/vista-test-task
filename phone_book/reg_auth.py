@@ -23,12 +23,12 @@ class RegisterForm(QDialog):
         username = self.ui.username_ln_edt.text()
         email = self.ui.email_ln_edt.text()
         birth_date = self.ui.birth_date_dt_edt.date().toString("yyyy.MM.dd")
-        # TODO: some input validaton
+        # TODO: some input validation
         try:
             self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
             res_code, password = db.register(username, email, birth_date)
-        except db.DatabaseConnectionError:
-            show_db_conn_err_msg(self)
+        except db.DatabaseConnectionError as exc:
+            show_db_conn_err_msg(details=str(exc), parent=self)
             self.close()
         else:
             self.result.code, self.result.username, self.result.password = res_code, username, password
@@ -76,13 +76,13 @@ class AuthForm(QDialog):
     def handle_login_btn_clicked(self):
         uname_or_email = self.ui.username_ln_edt.text()
         password = self.ui.password_ln_edt.text()
-        # TODO: some input validaton
+        # TODO: some input validation
         try:
             self.ui.login_btn.setDisabled(True)
             session_key = db.log_in(uname_or_email, password)
             self.result.username, _ = db.get_user_info(session_key)
-        except db.DatabaseConnectionError:
-            show_db_conn_err_msg(self)
+        except db.DatabaseConnectionError as exc:
+            show_db_conn_err_msg(details=str(exc), parent=self)
             self.close()
         else:
             if session_key:
@@ -100,8 +100,8 @@ class AuthForm(QDialog):
             try:
                 session_key = db.log_in(form.result.username, form.result.password)
                 self.result.username = form.result.username
-            except db.DatabaseConnectionError:
-                show_db_conn_err_msg(self.parent())
+            except db.DatabaseConnectionError as exc:
+                show_db_conn_err_msg(details=str(exc), parent=self)
                 self.close()
             else:
                 if session_key:

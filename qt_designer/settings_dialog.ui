@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsDialog</class>
+ <widget class="QWidget" name="SettingsDialog">
+  <property name="windowModality">
+   <enum>Qt::ApplicationModal</enum>
+  </property>
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>303</width>
+    <height>384</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>200</width>
+    <height>200</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Телефонная книжка — Настройки</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">#SettingsDialog {
+    border-width: 2;
+    border-radius: 5;
+    border-style: solid;
+    border-color: gray;
+}
+</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="1" column="0">
+    <widget class="QGroupBox" name="database_connection_gb">
+     <property name="title">
+      <string>Подключение к базе данных</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QLineEdit" name="host_name_ln_edt">
+        <property name="placeholderText">
+         <string>Имя хоста</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="port_ln_edt">
+        <property name="placeholderText">
+         <string>Порт</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="database_name_ln_edt">
+        <property name="readOnly">
+         <bool>false</bool>
+        </property>
+        <property name="placeholderText">
+         <string>Имя базы данных</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="username_ln_edt">
+        <property name="placeholderText">
+         <string>Имя пользователя</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="password_ln_edt">
+        <property name="placeholderText">
+         <string>Пароль</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="qsql_driver_ln_edt">
+        <property name="toolTip">
+         <string>Измение запрещено, приводится для справки</string>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="placeholderText">
+         <string>Драйвер</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="check_connection_btn">
+        <property name="text">
+         <string>Проверить соединение</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="QLabel" name="label">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>20</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Настройки</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+     <property name="margin">
+      <number>15</number>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="0">
+    <widget class="QDialogButtonBox" name="button_box">
+     <property name="styleSheet">
+      <string notr="true">QDialogButtonBox *[text=&quot;OK&quot;] {
+    background: #ccff66;
+}
+
+QDialogButtonBox *[text=&quot;Cancel&quot;] { 
+    background: #fe6665;
+}
+
+QDialogButtonBox *[text=&quot;Restore Defaults&quot;]  {
+    background: #d8d8d8;
+}
+</string>
+     </property>
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok|QDialogButtonBox::RestoreDefaults</set>
+     </property>
+     <property name="centerButtons">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QGroupBox" name="notifications_gb">
+     <property name="title">
+      <string>Уведомления</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="QCheckBox" name="birthdays_notification_chb">
+        <property name="text">
+         <string>Уведомлять о днях рождения за</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QSpinBox" name="birthdays_notification_range_value_sb">
+        <property name="suffix">
+         <string> дней</string>
+        </property>
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>365</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <tabstops>
+  <tabstop>host_name_ln_edt</tabstop>
+  <tabstop>port_ln_edt</tabstop>
+  <tabstop>database_name_ln_edt</tabstop>
+  <tabstop>username_ln_edt</tabstop>
+  <tabstop>password_ln_edt</tabstop>
+  <tabstop>check_connection_btn</tabstop>
+  <tabstop>birthdays_notification_chb</tabstop>
+  <tabstop>birthdays_notification_range_value_sb</tabstop>
+  <tabstop>qsql_driver_ln_edt</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>

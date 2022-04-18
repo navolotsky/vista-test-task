@@ -64,12 +64,12 @@ class AddContactForm(ContactDataForm):
         name = self.ui.name_ln_edt.text()
         phone_number = self.ui.phone_number_ln_edt.text()
         birth_date = self.ui.birth_date_dt_edt.date().toString("yyyy.MM.dd")
-        # TODO: some input validaton
+        # TODO: some input validation
         try:
             self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
             self.result.code, self.result.contact_id = self.add_contact_cb(name, phone_number, birth_date)
-        except db.DatabaseConnectionError:
-            show_db_conn_err_msg(self)
+        except db.DatabaseConnectionError as exc:
+            show_db_conn_err_msg(details=str(exc), parent=self)
             self.close()
         else:
             self.result.contact_name = name
@@ -91,7 +91,7 @@ class EditContactForm(ContactDataForm):
         self.result = SimpleNamespace(code=None, contact_new_name=None, same_data_contact_id=None)
 
     def handle_ok_btn_clicked(self):
-        # TODO: some input validaton
+        # TODO: some input validation
         name = self.ui.name_ln_edt.text()
         phone_number = self.ui.phone_number_ln_edt.text()
         birth_date = self.ui.birth_date_dt_edt.date()
@@ -104,8 +104,8 @@ class EditContactForm(ContactDataForm):
         try:
             self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
             self.result.code, self.result.same_data_contact_id = self.edit_contact_cb(name, phone_number, birth_date)
-        except db.DatabaseConnectionError:
-            show_db_conn_err_msg(self)
+        except db.DatabaseConnectionError as exc:
+            show_db_conn_err_msg(details=str(exc), parent=self)
             self.close()  # Unfortunately, a user will have to fill a form again
         else:
             self.result.contact_new_name = name
@@ -129,8 +129,8 @@ class DeleteContactDialog(QDialog):
         try:
             self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
             self.result.code = self.delete_contact_cb()
-        except db.DatabaseConnectionError:
-            show_db_conn_err_msg(self)
+        except db.DatabaseConnectionError as exc:
+            show_db_conn_err_msg(details=str(exc), parent=self)
             self.close()
         else:
             self.accept()
