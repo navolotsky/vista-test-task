@@ -2,9 +2,9 @@ from types import SimpleNamespace
 from typing import Callable, NamedTuple, Tuple
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QMessageBox
+from PyQt5.QtWidgets import QApplication, QDialog, QDialogButtonBox, QMessageBox
 
-from .msg_dialogs import show_db_conn_err_msg
+from .msg_dialogs import show_db_conn_err_msg, show_invalid_input_warning
 from .ui import Ui_SettingsDialog
 
 
@@ -39,9 +39,9 @@ class SettingsDialog(QDialog):
         self.check_db_connection_cb = check_db_connection_cb
         self.result = SimpleNamespace(changed_settings_saving_requested=False, field_values=None)
 
-        self._set_fields(self.initial_field_values)
+        self._set_field_values(self.initial_field_values)
 
-    def _set_fields(self, values: SettingsDialogFieldValues):
+    def _set_field_values(self, values: SettingsDialogFieldValues):
         for line_edt, value in zip((self.ui.host_name_ln_edt, self.ui.port_ln_edt, self.ui.database_name_ln_edt,
                                     self.ui.username_ln_edt, self.ui.password_ln_edt, self.ui.qsql_driver_ln_edt),
                                    values):
@@ -54,19 +54,33 @@ class SettingsDialog(QDialog):
         values = []
         for line_edt in (self.ui.host_name_ln_edt, self.ui.port_ln_edt, self.ui.database_name_ln_edt,
                          self.ui.username_ln_edt, self.ui.password_ln_edt, self.ui.qsql_driver_ln_edt):
-            values.append(line_edt.text() if line_edt not in str_to_int_fields else int(line_edt.text()))
+            value = line_edt.text()
+            if line_edt in str_to_int_fields:
+                try:
+                    value = int(value)
+                except ValueError:
+                    pass
+            values.append(value)
         values.append(self.ui.birthdays_notification_chb.isChecked())
         values.append(self.ui.birthdays_notification_range_value_sb.value())
         return SettingsDialogFieldValues(*values)
 
     def handle_check_connection_btn_clicked(self):
-        conn_check = self.check_db_connection_cb(self._get_field_values())
-        if not conn_check.is_error:
-            QMessageBox.information(self, "Телефонная книжка", "Соединение установлено успешно.")
-        else:
-            msg_text = "Ошибка конфигурации." if conn_check.is_critical else "Не удалось соединиться."
-            show_db_conn_err_msg(msg_text, details=conn_check.message, critical=conn_check.is_critical,
-                                 parent=self)
+        invalid_input_fields = self.ui.validate_and_highlight_all()
+        if invalid_input_fields:
+            show_invalid_input_warning(invalid_input_fields, highlighted=True, parent=self)
+            return
+        self.ui.check_connection_btn.setDisabled(True)
+        QApplication.processEvents()
+        try:
+            conn_check = self.check_db_connection_cb(self._get_field_values())
+            if not conn_check.is_error:
+                QMessageBox.information(self, "Телефонная книжка", "Соединение установлено успешно.")
+            else:
+                msg_text = "Ошибка конфигурации." if conn_check.is_critical else "Не удалось соединиться."
+                show_db_conn_err_msg(msg_text, details=conn_check.message, critical=conn_check.is_critical, parent=self)
+        finally:
+            self.ui.check_connection_btn.setEnabled(True)
 
     def handle_birthdays_notification_chb_state_changed(self, chb_active):
         self.ui.birthdays_notification_range_value_sb.setEnabled(chb_active)
@@ -76,9 +90,15 @@ class SettingsDialog(QDialog):
             r = QMessageBox.question(self, "Телефонная книжка",
                                      "Вы уверены, что хотите установить настройки по умолчанию?")
             if r == QMessageBox.Yes:
-                self._set_fields(self.get_defaults_cb())
+                self._set_field_values(self.get_defaults_cb())
+                self.ui.validate_and_highlight_all()
 
     def handle_button_box_accepted(self):
+        invalid_input_fields = self.ui.validate_and_highlight_all()
+        if invalid_input_fields:
+            show_invalid_input_warning(invalid_input_fields, highlighted=True, parent=self)
+            return
+
         self.result.field_values = values = self._get_field_values()
         self.result.changed_settings_saving_requested = values != self.initial_field_values
         self.accept()
@@ -89,6 +109,11 @@ class SettingsDialog(QDialog):
             r = QMessageBox.question(self, "Телефонная книжка", "Сохранить изменения?",
                                      buttons=QMessageBox.Cancel | QMessageBox.Yes | QMessageBox.No)
             if r == QMessageBox.Yes:
+                invalid_input_fields = self.ui.validate_and_highlight_all()
+                if invalid_input_fields:
+                    show_invalid_input_warning(invalid_input_fields, highlighted=True, parent=self)
+                    return
+
                 self.result.changed_settings_saving_requested = values != self.initial_field_values
                 self.accept()
             elif r == QMessageBox.No:

@@ -2,10 +2,10 @@ from types import SimpleNamespace
 from typing import Callable
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QStyle, QWidget
+from PyQt5.QtWidgets import QApplication, QDialog, QDialogButtonBox, QStyle, QWidget
 
 from . import database as db
-from .msg_dialogs import show_db_conn_err_msg
+from .msg_dialogs import show_db_conn_err_msg, show_invalid_input_warning
 from .ui import Ui_ContactDataForm, Ui_ContactsPage, Ui_DeleteContactDialog, Ui_UpcomingBirthdaysDialog
 
 
@@ -64,9 +64,15 @@ class AddContactForm(ContactDataForm):
         name = self.ui.name_ln_edt.text()
         phone_number = self.ui.phone_number_ln_edt.text()
         birth_date = self.ui.birth_date_dt_edt.date().toString("yyyy.MM.dd")
-        # TODO: some input validation
+
+        invalid_input_fields = self.ui.validate_and_highlight_all()
+        if invalid_input_fields:
+            show_invalid_input_warning(invalid_input_fields, highlighted=True, parent=self)
+            return
+
+        self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
+        QApplication.processEvents()
         try:
-            self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
             self.result.code, self.result.contact_id = self.add_contact_cb(name, phone_number, birth_date)
         except db.DatabaseConnectionError as exc:
             show_db_conn_err_msg(details=str(exc), parent=self)
@@ -91,18 +97,23 @@ class EditContactForm(ContactDataForm):
         self.result = SimpleNamespace(code=None, contact_new_name=None, same_data_contact_id=None)
 
     def handle_ok_btn_clicked(self):
-        # TODO: some input validation
         name = self.ui.name_ln_edt.text()
         phone_number = self.ui.phone_number_ln_edt.text()
         birth_date = self.ui.birth_date_dt_edt.date()
+
+        invalid_input_fields = self.ui.validate_and_highlight_all()
+        if invalid_input_fields:
+            show_invalid_input_warning(invalid_input_fields, highlighted=True, parent=self)
+            return
 
         if (name, phone_number, birth_date) == self.original_input_data:
             self.reject()  # data didn't change so let's interpret Ok as a synonym for Cancel at this case
             return
 
         birth_date = birth_date.toString("yyyy.MM.dd")
+        self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
+        QApplication.processEvents()
         try:
-            self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
             self.result.code, self.result.same_data_contact_id = self.edit_contact_cb(name, phone_number, birth_date)
         except db.DatabaseConnectionError as exc:
             show_db_conn_err_msg(details=str(exc), parent=self)

@@ -5,7 +5,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLineEdit, QMessageBox
 
 from . import database as db
-from .msg_dialogs import show_db_conn_err_msg, show_not_implemented_msg
+from .msg_dialogs import show_db_conn_err_msg, show_invalid_input_warning, show_not_implemented_msg
 from .ui import Ui_AuthForm, Ui_RegisterForm
 
 
@@ -23,9 +23,15 @@ class RegisterForm(QDialog):
         username = self.ui.username_ln_edt.text()
         email = self.ui.email_ln_edt.text()
         birth_date = self.ui.birth_date_dt_edt.date().toString("yyyy.MM.dd")
-        # TODO: some input validation
+
+        invalid_input_fields = self.ui.validate_and_highlight_all()
+        if invalid_input_fields:
+            show_invalid_input_warning(invalid_input_fields, highlighted=True, parent=self)
+            return
+
+        self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
+        QApplication.processEvents()
         try:
-            self.ui.button_box.button(QDialogButtonBox.Ok).setDisabled(True)
             res_code, password = db.register(username, email, birth_date)
         except db.DatabaseConnectionError as exc:
             show_db_conn_err_msg(details=str(exc), parent=self)
@@ -76,9 +82,15 @@ class AuthForm(QDialog):
     def handle_login_btn_clicked(self):
         uname_or_email = self.ui.username_ln_edt.text()
         password = self.ui.password_ln_edt.text()
-        # TODO: some input validation
+
+        invalid_input_fields = self.ui.validate_and_highlight_all()
+        if invalid_input_fields:
+            show_invalid_input_warning(invalid_input_fields, highlighted=True, parent=self)
+            return
+
+        self.ui.login_btn.setDisabled(True)
+        QApplication.processEvents()
         try:
-            self.ui.login_btn.setDisabled(True)
             session_key = db.log_in(uname_or_email, password)
             self.result.username, _ = db.get_user_info(session_key)
         except db.DatabaseConnectionError as exc:
